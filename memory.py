@@ -1,36 +1,44 @@
+# memory.py
 import json
 import os
 
+# File to store persistent memory
 MEMORY_FILE = "memory.json"
 memory = {}
 
-# --- LOAD MEMORY ON STARTUP ---
+# Load memory on startup
 if os.path.exists(MEMORY_FILE):
     try:
         with open(MEMORY_FILE, "r", encoding="utf-8") as f:
             memory = json.load(f)
-    except:
+    except json.JSONDecodeError:
         memory = {}
+else:
+    # If the file doesn't exist, create an empty one
+    with open(MEMORY_FILE, "w", encoding="utf-8") as f:
+        json.dump({}, f)
 
-# --- MEMORY FUNCTIONS ---
+# Save memory to disk
 def save_memory():
-    """Save memory to file"""
     with open(MEMORY_FILE, "w", encoding="utf-8") as f:
         json.dump(memory, f, indent=4)
 
+# Remember a key-value pair
 def remember(key, value):
-    """Store a value in memory and save"""
+    key = str(key).strip()
+    value = str(value).strip()
     memory[key] = value
     save_memory()
 
+# Recall a value by key
 def recall(key):
-    """Retrieve a value from memory"""
-    return memory.get(key, None)
+    return memory.get(str(key).strip(), None)
 
+# Clear memory
+# If key is provided, remove that entry; otherwise, clear all memory
 def clear_memory(key=None):
-    """Clear specific key or all memory and save"""
     if key:
-        memory.pop(key, None)
+        memory.pop(str(key).strip(), None)
     else:
         memory.clear()
     save_memory()
