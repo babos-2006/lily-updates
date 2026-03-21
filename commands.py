@@ -4,6 +4,16 @@ import platform
 import subprocess
 import memory
 
+# Map common apps to system commands (Windows examples)
+COMMON_APPS = {
+    "settings": "ms-settings:",
+    "file explorer": "explorer",
+    "notepad": "notepad",
+    "calculator": "calc",
+    "paint": "mspaint",
+    "command prompt": "cmd",
+}
+
 def brain(text):
     text = text.lower()
 
@@ -14,15 +24,12 @@ def brain(text):
             memory.remember(key.strip(), value.strip())
             return f"I've remembered {key.strip()}."
         except:
-            return "Please use format: remember key = value"
+            return "Use format: remember key = value"
 
     if text.startswith("recall"):
         key = text.replace("recall", "").strip()
         val = memory.recall(key)
-        if val:
-            return f"{key} is {val}."
-        else:
-            return f"I don't remember {key}."
+        return f"{key} is {val}." if val else f"I don't remember {key}."
 
     if text.startswith("clear memory"):
         key = text.replace("clear memory", "").strip()
@@ -35,20 +42,34 @@ def brain(text):
 
     # ------------------ Open Apps or Files ------------------
     if text.startswith("open ") or text.startswith("play "):
-        # Remove the command keyword
-        path = text.replace("open", "").replace("play", "").strip()
-        if not path:
-            return "Please provide a file or app to open."
+        # Remove command keyword
+        target = text.replace("open", "").replace("play", "").strip()
+        if not target:
+            return "Please say what to open or play."
+
+        # Check if it's a common app
+        if target in COMMON_APPS:
+            cmd = COMMON_APPS[target]
+            try:
+                if platform.system() == "Windows":
+                    os.startfile(cmd)  # Windows apps
+                else:
+                    subprocess.call([cmd])  # macOS/Linux (adjust as needed)
+                return f"Opened {target}"
+            except Exception as e:
+                return f"Failed to open {target}: {e}"
+
+        # Try to open as file path (if user provides path)
         try:
             if platform.system() == "Windows":
-                os.startfile(path)
-            elif platform.system() == "Darwin":  # macOS
-                subprocess.call(["open", path])
-            else:  # Linux
-                subprocess.call(["xdg-open", path])
-            return f"Opened {path}"
+                os.startfile(target)
+            elif platform.system() == "Darwin":
+                subprocess.call(["open", target])
+            else:
+                subprocess.call(["xdg-open", target])
+            return f"Opened {target}"
         except Exception as e:
-            return f"Failed to open {path}: {e}"
+            return f"Failed to open {target}: {e}"
 
     # ------------------ Default Response ------------------
     return "I don't understand that command yet."
