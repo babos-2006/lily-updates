@@ -1,196 +1,339 @@
-# app_core.py
 import tkinter as tk
 from tkinter import messagebox, colorchooser, filedialog
-import pyttsx3
-import commands
+from tkinter.scrolledtext import ScrolledText
+
+import threading
+import logging
 import json
 import os
+import time
 
-# ---------------- VOICE ----------------
+import pyttsx3
+import commands
+
+# =========================
+# LOGGING
+# =========================
+
+logging.basicConfig(
+    filename="lily.log",
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s"
+)
+
+# =========================
+# VOICE ENGINE
+# =========================
+
 engine = pyttsx3.init()
-for v in engine.getProperty('voices'):
-    if "zira" in v.name.lower():
-        engine.setProperty('voice', v.id)
+
+for voice in engine.getProperty('voices'):
+    if "zira" in voice.name.lower():
+        engine.setProperty('voice', voice.id)
+
 engine.setProperty("rate", 160)
 
 def speak(text):
-    if text:
-        engine.say(text)
-        engine.runAndWait()
+    def run():
+        try:
+            engine.say(text)
+            engine.runAndWait()
+        except Exception as e:
+            logging.error(f"Speech Error: {e}")
 
-# ---------------- CONFIG ----------------
+    threading.Thread(target=run, daemon=True).start()
+
+# =========================
+# CONFIG
+# =========================
+
 CONFIG_FILE = "config.json"
 
 default_config = {
     "startup_message": True,
     "confirm_on_close": True,
     "chat_bg_color": "#ece5dd",
-    "chat_bg_image": ""
+    "chat_fg_color": "#000000",
+    "voice_enabled": True,
+    "window_width": 500,
+    "window_height": 750
 }
 
 def save_config(cfg):
-    with open(CONFIG_FILE, "w") as f:
-        json.dump(cfg, f, indent=4)
+    try:
+        with open(CONFIG_FILE, "w") as f:
+            json.dump(cfg, f, indent=4)
+
+    except Exception as e:
+        logging.error(f"Failed to save config: {e}")
 
 def load_config():
     if not os.path.exists(CONFIG_FILE):
         save_config(default_config)
         return default_config
+
     try:
         with open(CONFIG_FILE, "r") as f:
             data = json.load(f)
+
         for key in default_config:
             if key not in data:
                 data[key] = default_config[key]
+
         return data
-    except (json.JSONDecodeError, ValueError):
+
+    except Exception as e:
+        logging.error(f"Config load failed: {e}")
         save_config(default_config)
         return default_config
 
 config = load_config()
 
-# ---------------- SETTINGS WINDOW ----------------
-def open_settings():
-    settings_win = tk.Toplevel(root)
-    settings_win.title("Settings")
-    settings_win.geometry("350x250")
+# =========================
+# MAIN APP
+# =========================
 
-    # General Settings
-    tk.Label(settings_win, text="General Settings", font=("Arial", 10, "bold")).pack(anchor="w", padx=10, pady=5)
-    
-    startup_var = tk.BooleanVar(value=config.get("startup_message", True))
-    tk.Checkbutton(settings_win, text="Show startup message", variable=startup_var).pack(anchor="w", padx=20)
+class LilyApp:
 
-    close_var = tk.BooleanVar(value=config.get("confirm_on_close", True))
-    tk.Checkbutton(settings_win, text="Confirm before closing", variable=close_var).pack(anchor="w", padx=20)
+    def __init__(self, root):
 
-    # Appearance Settings
-    tk.Label(settings_win, text="Appearance Settings", font=("Arial", 10, "bold")).pack(anchor="w", padx=10, pady=5)
+        self.root = root
 
-    # Change chat background color
-    def change_bg_color():
-        color = colorchooser.askcolor(title="Select Chat Background Color")[1]
-        if color:
-            config["chat_bg_color"] = color
-            chat_frame.config(bg=color)
-            canvas.config(bg=color)
-            scrollable_frame.config(bg=color)
+        self.root.title("Lily AI")
 
-    tk.Button(settings_win, text="Change Chat Background Color", command=change_bg_color).pack(anchor="w", padx=20, pady=2)
+        width = config.get("window_width", 500)
+        height = config.get("window_height", 750)
 
-    # Change wallpaper
-    def change_bg_image():
-        file_path = filedialog.askopenfilename(title="Select Wallpaper Image", filetypes=[("Image Files", "*.png *.jpg *.jpeg *.gif")])
-        if file_path:
-            config["chat_bg_image"] = file_path
-            if file_path:
-                try:
-                    from PIL import Image, ImageTk
-                    img = Image.open(file_path)
-                    img = img.resize((450, 700))
-                    bg_img = ImageTk.PhotoImage(img)
-                    canvas.create_image(0, 0, image=bg_img, anchor="nw")
-                    canvas.bg_image = bg_img  # keep reference
-                except Exception as e:
-                    messagebox.showerror("Error", f"Failed to load image: {e}")
+        self.root.geometry(f"{width}x{height}")
 
-    tk.Button(settings_win, text="Select Wallpaper Image", command=change_bg_image).pack(anchor="w", padx=20, pady=2)
+        self.setup_ui()
 
-    # Save button
-    def save_and_close():
-        config["startup_message"] = startup_var.get()
-        config["confirm_on_close"] = close_var.get()
-        save_config(config)
-        settings_win.destroy()
+        if config.get("startup_message", True):
+            self.add_message(
+                "Lily",
+                "Hello! I am Lily AI. How can I help you today?"
+            )
 
-    tk.Button(settings_win, text="Save Settings", command=save_and_close).pack(pady=10)
+    # =========================
+    # UI
+    # =========================
 
-# ---------------- APP START ----------------
-def start():
-    global root
-    global chat_frame, canvas, scrollable_frame
-    root = tk.Tk()
-    root.geometry("450x700")
-    root.title("Lily AI")
+    def setup_ui(self):
 
-    # ---------------- CHAT AREA ----------------
-    chat_frame = tk.Frame(root, bg=config.get("chat_bg_color", "#ece5dd"))
-    chat_frame.pack(fill="both", expand=True)
+        # Top Bar
+        top_frame = tk.Frame(self.root, bg="#202123", height=50)
+        top_frame.pack(fill="x")
 
-    canvas = tk.Canvas(chat_frame, bg=config.get("chat_bg_color", "#ece5dd"), highlightthickness=0)
-    scrollbar = tk.Scrollbar(chat_frame, command=canvas.yview)
-    scrollable_frame = tk.Frame(canvas, bg=config.get("chat_bg_color", "#ece5dd"))
+        title = tk.Label(
+            top_frame,
+            text="Lily AI",
+            bg="#202123",
+            fg="white",
+            font=("Arial", 14, "bold")
+        )
+        title.pack(side="left", padx=10, pady=10)
 
-    scrollable_frame.bind(
-        "<Configure>",
-        lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
-    )
+        settings_btn = tk.Button(
+            top_frame,
+            text="⚙",
+            command=self.open_settings
+        )
+        settings_btn.pack(side="right", padx=10)
 
-    canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
-    canvas.configure(yscrollcommand=scrollbar.set)
+        # Chat Area
+        self.chat_area = ScrolledText(
+            self.root,
+            wrap="word",
+            font=("Arial", 11),
+            bg=config.get("chat_bg_color"),
+            fg=config.get("chat_fg_color"),
+            state="disabled"
+        )
 
-    canvas.pack(side="left", fill="both", expand=True)
-    scrollbar.pack(side="right", fill="y")
+        self.chat_area.pack(fill="both", expand=True, padx=5, pady=5)
 
-    # ---------------- SETTINGS BUTTON ----------------
-    settings_btn = tk.Button(root, text="⚙️ Settings", command=open_settings)
-    settings_btn.place(relx=1.0, x=-10, y=10, anchor="ne")  # top-right corner
+        # Input Area
+        bottom_frame = tk.Frame(self.root)
+        bottom_frame.pack(fill="x")
 
-    # ---------------- INPUT AREA ----------------
-    entry_frame = tk.Frame(root)
-    entry_frame.pack(fill="x")
+        self.entry = tk.Entry(
+            bottom_frame,
+            font=("Arial", 11)
+        )
 
-    entry = tk.Entry(entry_frame)
-    entry.pack(side="left", fill="x", expand=True, padx=5, pady=5)
-
-    def add_message(sender, text):
-        bubble_color = "#dcf8c6" if sender == "Lily" else "#fff"
-        bubble = tk.Label(
-            scrollable_frame,
-            text=text,
-            bg=bubble_color,
-            wraplength=300,
-            justify="left",
-            anchor="w",
-            padx=10,
+        self.entry.pack(
+            side="left",
+            fill="x",
+            expand=True,
+            padx=5,
             pady=5
         )
-        bubble.pack(
-            anchor="w" if sender == "Lily" else "e",
-            pady=5,
-            padx=10
+
+        self.entry.bind("<Return>", lambda e: self.send_command())
+
+        send_btn = tk.Button(
+            bottom_frame,
+            text="Send",
+            command=self.send_command
         )
-        if sender == "Lily":
+
+        send_btn.pack(side="right", padx=5)
+
+    # =========================
+    # MESSAGES
+    # =========================
+
+    def add_message(self, sender, text):
+
+        timestamp = time.strftime("%H:%M")
+
+        self.chat_area.config(state="normal")
+
+        self.chat_area.insert(
+            tk.END,
+            f"\n[{timestamp}] {sender}: {text}\n"
+        )
+
+        self.chat_area.config(state="disabled")
+        self.chat_area.see(tk.END)
+
+        if sender == "Lily" and config.get("voice_enabled", True):
             speak(text)
-        canvas.update_idletasks()
-        canvas.yview_moveto(1.0)
 
-    def send_command():
-        t = entry.get()
-        if not t.strip():
+    # =========================
+    # COMMAND PROCESSING
+    # =========================
+
+    def send_command(self):
+
+        text = self.entry.get().strip()
+
+        if not text:
             return
-        entry.delete(0, tk.END)
-        add_message("You", t)
+
+        self.entry.delete(0, tk.END)
+
+        self.add_message("You", text)
+
+        threading.Thread(
+            target=self.process_command,
+            args=(text,),
+            daemon=True
+        ).start()
+
+    def process_command(self, text):
+
+        self.add_message("Lily", "Thinking...")
+
         try:
-            response = commands.brain(t)
+            response = commands.brain(text)
+
         except Exception as e:
+            logging.error(f"Command Error: {e}")
             response = f"Error: {e}"
-        add_message("Lily", response)
 
-    send_btn = tk.Button(entry_frame, text="Send", command=send_command)
-    send_btn.pack(side="right", padx=5)
+        self.add_message("Lily", response)
 
-    # ---------------- STARTUP MESSAGE ----------------
-    if config.get("startup_message", True):
-        add_message("Lily", "Hello! I am Lily. I can open apps, play files, and update myself automatically!")
+    # =========================
+    # SETTINGS
+    # =========================
 
-    # ---------------- CLOSE CONFIRM ----------------
-    def on_close():
+    def open_settings(self):
+
+        settings = tk.Toplevel(self.root)
+
+        settings.title("Settings")
+        settings.geometry("350x300")
+
+        voice_var = tk.BooleanVar(
+            value=config.get("voice_enabled", True)
+        )
+
+        startup_var = tk.BooleanVar(
+            value=config.get("startup_message", True)
+        )
+
+        close_var = tk.BooleanVar(
+            value=config.get("confirm_on_close", True)
+        )
+
+        tk.Checkbutton(
+            settings,
+            text="Enable Voice",
+            variable=voice_var
+        ).pack(anchor="w", padx=20, pady=5)
+
+        tk.Checkbutton(
+            settings,
+            text="Startup Message",
+            variable=startup_var
+        ).pack(anchor="w", padx=20, pady=5)
+
+        tk.Checkbutton(
+            settings,
+            text="Confirm Before Close",
+            variable=close_var
+        ).pack(anchor="w", padx=20, pady=5)
+
+        def change_bg():
+
+            color = colorchooser.askcolor()[1]
+
+            if color:
+                config["chat_bg_color"] = color
+                self.chat_area.config(bg=color)
+
+        tk.Button(
+            settings,
+            text="Change Chat Background",
+            command=change_bg
+        ).pack(pady=10)
+
+        def save():
+
+            config["voice_enabled"] = voice_var.get()
+            config["startup_message"] = startup_var.get()
+            config["confirm_on_close"] = close_var.get()
+
+            save_config(config)
+
+            settings.destroy()
+
+        tk.Button(
+            settings,
+            text="Save Settings",
+            command=save
+        ).pack(pady=15)
+
+    # =========================
+    # CLOSE EVENT
+    # =========================
+
+    def on_close(self):
+
         if config.get("confirm_on_close", True):
-            if messagebox.askokcancel("Quit", "Do you really want to close Lily?"):
-                root.destroy()
-        else:
-            root.destroy()
 
-    root.protocol("WM_DELETE_WINDOW", on_close)
+            if not messagebox.askokcancel(
+                "Quit",
+                "Close Lily AI?"
+            ):
+                return
+
+        self.root.destroy()
+
+# =========================
+# START APP
+# =========================
+
+def start():
+
+    root = tk.Tk()
+
+    app = LilyApp(root)
+
+    root.protocol("WM_DELETE_WINDOW", app.on_close)
+
     root.mainloop()
+
+if __name__ == "__main__":
+    start()
