@@ -2,49 +2,48 @@ import logging
 import google.generativeai as genai
 
 # =========================
-# API CONFIG
+# GEMINI CONFIG
 # =========================
 
 API_KEY = "YOUR_API_KEY_HERE"
 
-genai.configure(api_key=API_KEY)
+# =========================
+# SETUP
+# =========================
 
-# =========================
-# MODEL SETUP
-# =========================
+genai.configure(api_key=API_KEY)
 
 model = genai.GenerativeModel("gemini-1.5-flash")
 
 # =========================
-# CHAT HISTORY
+# MEMORY
 # =========================
 
 conversation_history = []
 
 # =========================
-# SYSTEM PERSONALITY
+# PERSONALITY
 # =========================
 
 SYSTEM_PROMPT = """
 You are Lily AI.
 
-You are a smart desktop AI assistant.
-You are friendly, helpful, intelligent, and concise.
+You are a smart desktop assistant.
+You are friendly, intelligent, and concise.
 
 You help users with:
-- conversations
 - productivity
-- learning
-- computer tasks
 - explanations
-- problem solving
+- coding
+- learning
+- conversations
+- desktop assistance
 
-Keep responses natural and conversational.
-Avoid overly long answers unless necessary.
+Respond naturally.
 """
 
 # =========================
-# BUILD CONTEXT
+# BUILD PROMPT
 # =========================
 
 def build_prompt(user_message):
@@ -52,7 +51,6 @@ def build_prompt(user_message):
     history_text = ""
 
     for msg in conversation_history[-10:]:
-
         history_text += f"{msg['role']}: {msg['content']}\n"
 
     final_prompt = f"""
@@ -69,30 +67,26 @@ Lily:
     return final_prompt
 
 # =========================
-# MAIN AI FUNCTION
+# ASK GEMINI
 # =========================
 
 def ask_gemini(user_message):
 
     try:
 
-        # Store user message
         conversation_history.append({
             "role": "User",
             "content": user_message
         })
 
-        # Build contextual prompt
         prompt = build_prompt(user_message)
 
-        # Generate response
         response = model.generate_content(prompt)
 
         if response.text:
 
             ai_response = response.text.strip()
 
-            # Store AI response
             conversation_history.append({
                 "role": "Lily",
                 "content": ai_response
@@ -107,19 +101,3 @@ def ask_gemini(user_message):
         logging.error(f"Gemini Error: {e}")
 
         return f"AI Error: {e}"
-
-# =========================
-# CLEAR CHAT MEMORY
-# =========================
-
-def clear_conversation():
-
-    conversation_history.clear()
-
-# =========================
-# GET CHAT HISTORY
-# =========================
-
-def get_history():
-
-    return conversation_history
