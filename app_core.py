@@ -53,7 +53,18 @@ config = load_config()
 
 engine = pyttsx3.init()
 
-engine.setProperty("rate", 160)
+voices = engine.getProperty('voices')
+
+for voice in voices:
+
+    print(voice.name)
+
+    if "zira" in voice.name.lower():
+        engine.setProperty('voice', voice.id)
+        break
+
+engine.setProperty("rate", 145)
+engine.setProperty("volume", 1.0)
 
 # =========================
 # SPEAK
